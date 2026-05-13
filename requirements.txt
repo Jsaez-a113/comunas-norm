@@ -1,0 +1,9 @@
+# Dependencias Python del proyecto COMUNAS_NORM
+# Instalar con: pip install -r requirements.txt
+
+# Framework web minimalista — servidor HTTP y routing
+flask==3.1.0
+
+# Servidor WSGI de producción (reemplaza el servidor de desarrollo de Flask)
+# Railway lo usa para servir la app de forma eficiente
+gunicorn==22.0.0

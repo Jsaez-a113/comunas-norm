@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Normalizador COMUNAS_NORM</title>
+<style>
+  /* === RESET Y VARIABLES GLOBALES === */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f4f6fa;
+    --surface: #ffffff;
+    --border: #d8dce8;
+    --border-light: #eaecf3;
+    --text: #1a1d2b;
+    --text-muted: #6b7080;
+    --accent: #2d5be3;
+    --accent-light: #e8edfd;
+    --success: #1a8a5a;
+    --success-light: #e6f7ef;
+    --warn: #b45309;
+    --danger: #c0392b;
+    --danger-light: #fdecea;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.6; min-height: 100vh; }
+
+  /* === HEADER === */
+  header { background: var(--accent); color: #fff; padding: 18px 32px; display: flex; align-items: center; gap: 14px; }
+  header .icon { font-size: 26px; }
+  header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+  header p { font-size: 13px; opacity: 0.85; margin-top: 1px; }
+
+  /* === LAYOUT PRINCIPAL === */
+  main { max-width: 900px; margin: 28px auto; padding: 0 20px 60px; }
+
+  /* === TARJETAS === */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 20px; overflow: hidden; }
+  .card-head { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border-light); font-weight: 600; font-size: 14px; background: #fafbfd; }
+  .card-head .num { width: 24px; height: 24px; background: var(--accent); color: #fff; border-radius: 50%; font-size: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+  .card-body { padding: 20px; }
+
+  /* === ZONA DE DRAG & DROP === */
+  #dropzone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 36px 20px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; background: #fafbfd; }
+  #dropzone:hover, #dropzone.drag-over { border-color: var(--accent); background: var(--accent-light); }
+  #dropzone .dz-icon { font-size: 38px; margin-bottom: 10px; display: block; }
+  #dropzone p { color: var(--text-muted); font-size: 14px; }
+  #dropzone strong { color: var(--accent); }
+  #file-input { display: none; }
+  #file-info { display: none; margin-top: 12px; padding: 10px 14px; background: var(--success-light); border: 1px solid #a3d9c0; border-radius: var(--radius-sm); font-size: 13px; color: var(--success); }
+
+  /* === OPCIONES === */
+  .opt-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border-light); }
+  .opt-row:last-child { border-bottom: none; }
+  .opt-label { font-size: 14px; }
+  .opt-label span { display: block; font-size: 12px; color: var(--text-muted); }
+
+  /* Botones de selección de formato */
+  .seg { display: flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .seg button { border: none; background: #fff; padding: 6px 13px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--border); transition: background .15s, color .15s; font-family: inherit; }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #fff; font-weight: 600; }
+  .seg button:hover:not(.active) { background: var(--accent-light); }
+
+  /* Interruptor toggle */
+  .toggle { position: relative; width: 42px; height: 23px; }
+  .toggle input { display: none; }
+  .toggle .slider { position: absolute; inset: 0; background: var(--border); border-radius: 23px; cursor: pointer; transition: background .2s; }
+  .toggle .slider::after { content: ''; position: absolute; width: 17px; height: 17px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  .toggle input:checked + .slider { background: var(--accent); }
+  .toggle input:checked + .slider::after { transform: translateX(19px); }
+
+  /* === BOTÓN PRINCIPAL === */
+  #btn-run { width: 100%; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background .2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #btn-run:hover { background: #1e44c0; }
+  #btn-run:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+
+  /* === ESTADÍSTICAS === */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: #fafbfd; border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: 14px 16px; }
+  .stat .label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .stat .value { font-size: 22px; font-weight: 700; }
+  .stat.ok .value { color: var(--success); }
+  .stat.warn .value { color: var(--warn); }
+  .stat.info .value { color: var(--accent); }
+
+  /* === BOTONES DE DESCARGA === */
+  .dl-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn-dl { display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; border: 1px solid; transition: background .15s; }
+  .btn-dl.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-dl.primary:hover { background: #1e44c0; }
+  .btn-dl.secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+  .btn-dl.secondary:hover { background: var(--bg); }
+  .btn-dl:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* === TABLA DE PREVIEW === */
+  .table-wrap { overflow-x: auto; max-height: 340px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { position: sticky; top: 0; background: #f0f3fa; padding: 9px 12px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  tbody tr:nth-child(even) { background: #fafbfd; }
+  tbody td { padding: 7px 12px; border-bottom: 1px solid var(--border-light); }
+  tbody td.changed { color: var(--accent); font-weight: 500; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-dup { background: var(--danger-light); color: var(--danger); }
+  .badge-fix { background: var(--accent-light); color: var(--accent); }
+  .badge-ok  { background: var(--success-light); color: var(--success); }
+
+  /* === LOG === */
+  #log-box { background: #1a1d2b; color: #a8d8a8; font-family: 'Courier New', monospace; font-size: 12px; padding: 14px 16px; border-radius: var(--radius-sm); max-height: 220px; overflow-y: auto; line-height: 1.7; white-space: pre-wrap; }
+
+  /* === SPINNER === */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .hidden { display: none !important; }
+
+  /* === ALERTA DE ERROR === */
+  #error-box { background: var(--danger-light); border: 1px solid #f5c2c2; border-radius: var(--radius-sm); padding: 12px 16px; color: var(--danger); font-size: 13px; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="icon">🗂️</div>
+  <div>
+    <h1>Normalizador COMUNAS_NORM</h1>
+    <p>Arquitectura y Almacenamiento de Datos — Evaluación 2 · 2026</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── PASO 1: Cargar archivo ─────────────────────────────── -->
+  <div class="card">
+    <div class="card-head"><div class="num">1</div> Cargar archivo de datos</div>
+    <div class="card-body">
+      <!-- Zona de arrastrar y soltar -->
+      <div id="dropzone" onclick="document.getElementById('file-input').click()">
+        <span class="dz-icon">📄</span>
+        <p>Arrastra tu archivo <strong>.txt</strong> aquí o <strong>haz clic para seleccionar</strong></p>
+        <p style="margin-top:6px;font-size:12px;">Una comuna por línea · Compatible con .txt y .csv</p>
+      </div>
+      <!-- Input oculto para selección de archivo -->
+      <input type="file" id="file-input" accept=".txt,.csv">
+      <!-- Mensaje de confirmación de carga -->
+      <div id="file-info"></div>
+      <div id="error-box" class="hidden"></div>
+    </div>
+  </div>
+
+  <!-- ── PASO 2: Opciones de normalización ─────────────────── -->
+  <div class="card">
+    <div class="card-head"><div class="num">2</div> Opciones de normalización</div>
+    <div class="card-body">
+
+      <div class="opt-row">
+        <div class="opt-label">
+          Formato de texto
+          <span>Cómo se escribirá cada nombre de comuna</span>
+        </div>
+        <div class="seg">
+          <button class="active" data-fmt="titulo" onclick="setFmt(this)">Título</button>
+          <button data-fmt="mayus"  onclick="setFmt(this)">MAYÚS</button>
+          <button data-fmt="minus"  onclick="setFmt(this)">minus</button>
+        </div>
+      </div>
+
+      <div class="opt-row">
+        <div class="opt-label">
+          Eliminar tildes y acentos
+          <span>á→a, é→e, í→i, ó→o, ú→u…</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-tildes" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="opt-row">
+        <div class="opt-label">
+          Reemplazar Ñ → N
+          <span>ñ→n / Ñ→N (según formato elegido)</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-enie" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="opt-row">
+        <div class="opt-label">
+          Eliminar duplicados
+          <span>Quita registros repetidos (comparación normalizada)</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-dedup" checked><span class="slider"></span></label>
+      </div>
+
+      <div class="opt-row">
+        <div class="opt-label">
+          Corregir espacios múltiples
+          <span>"san  pedro" → "San Pedro"</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="opt-spaces" checked><span class="slider"></span></label>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── PASO 3: Ejecutar ───────────────────────────────────── -->
+  <button id="btn-run" disabled onclick="procesar()">
+    <span id="btn-icon">▶</span>
+    <span id="btn-text">Normalizar datos</span>
+  </button>
+
+  <!-- ── RESULTADOS ─────────────────────────────────────────── -->
+  <div id="results" class="hidden" style="margin-top:24px;">
+
+    <!-- Resumen estadístico -->
+    <div class="card">
+      <div class="card-head">📊 Resumen del proceso</div>
+      <div class="card-body">
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="label">Registros originales</div>
+            <div class="value" id="s-total">0</div>
+          </div>
+          <div class="stat ok">
+            <div class="label">Registros únicos finales</div>
+            <div class="value" id="s-unique">0</div>
+          </div>
+          <div class="stat warn">
+            <div class="label">Duplicados eliminados</div>
+            <div class="value" id="s-dups">0</div>
+          </div>
+          <div class="stat info">
+            <div class="label">Valores modificados</div>
+            <div class="value" id="s-changed">0</div>
+          </div>
+        </div>
+
+        <!-- Botones para descargar los tres archivos de salida -->
+        <div class="dl-row">
+          <button class="btn-dl primary" id="btn-csv" onclick="descargar('csv')" disabled>
+            💾 Descargar CSV limpio
+          </button>
+          <button class="btn-dl secondary" id="btn-log" onclick="descargar('log')" disabled>
+            📋 Descargar log de cambios
+          </button>
+          <button class="btn-dl secondary" id="btn-sql" onclick="descargar('sql')" disabled>
+            🗄️ Descargar INSERT SQL
+          </button>
+          <button class="btn-dl secondary" onclick="limpiarBD()" style="color:var(--danger);border-color:var(--danger)">
+            🗑️ Limpiar BD
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vista previa de cambios -->
+    <div class="card">
+      <div class="card-head">🔍 Vista previa de cambios (primeros 200)</div>
+      <div class="card-body" style="padding:0">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Valor original</th>
+                <th>Valor normalizado</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="preview-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log de cambios en pantalla -->
+    <div class="card">
+      <div class="card-head">📝 Log de cambios</div>
+      <div class="card-body" style="padding:12px">
+        <div id="log-box"></div>
+      </div>
+    </div>
+
+  </div><!-- /results -->
+
+</main>
+
+<script>
+// =============================================================================
+// frontend/index.html — Lógica JavaScript del cliente
+// =============================================================================
+// Responsabilidades:
+//   1. Gestionar la carga de archivos (drag & drop + clic)
+//   2. Enviar el archivo y opciones al backend Flask via fetch()
+//   3. Renderizar los resultados: estadísticas, tabla de preview y log
+//   4. Disparar las descargas via /api/descargar/<sesion_id>/<tipo>
+// =============================================================================
+
+// Variable global que almacena el ID de la última sesión procesada
+// (necesario para las URLs de descarga)
+let sesionActual = null;
+
+// Referencia al archivo seleccionado por el usuario
+let archivoSeleccionado = null;
+
+// Formato de texto activo en los botones segmentados
+let formatoActivo = 'titulo';
+
+// =============================================================================
+// DRAG & DROP
+// =============================================================================
+
+const dz = document.getElementById('dropzone');
+
+// Al arrastrar un archivo sobre la zona: resaltar el borde
+dz.addEventListener('dragover', e => {
+  e.preventDefault();
+  dz.classList.add('drag-over');
+});
+
+// Al salir de la zona: quitar el resaltado
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+
+// Al soltar el archivo: procesarlo
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) registrarArchivo(f);
+});
+
+// También manejar la selección tradicional con input[type=file]
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) registrarArchivo(e.target.files[0]);
+});
+
+/**
+ * Registra el archivo seleccionado y muestra la información al usuario.
+ * No procesa aún: solo guarda la referencia y habilita el botón Normalizar.
+ */
+function registrarArchivo(file) {
+  archivoSeleccionado = file;
+
+  // Mostrar mensaje de confirmación con nombre y tamaño del archivo
+  const info = document.getElementById('file-info');
+  const kb = (file.size / 1024).toFixed(1);
+  info.style.display = 'block';
+  info.innerHTML = `✅ <strong>${file.name}</strong> listo — ${kb} KB`;
+
+  // Habilitar el botón de procesamiento
+  document.getElementById('btn-run').disabled = false;
+
+  // Ocultar errores anteriores
+  document.getElementById('error-box').classList.add('hidden');
+}
+
+// =============================================================================
+// FORMATO (botones segmentados)
+// =============================================================================
+
+/**
+ * Cambia el formato de texto activo al hacer clic en los botones Título/MAYÚS/minus.
+ * Actualiza el estado visual del botón seleccionado.
+ */
+function setFmt(btn) {
+  document.querySelectorAll('.seg button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  formatoActivo = btn.dataset.fmt;
+}
+
+// =============================================================================
+// PROCESO PRINCIPAL — envío al backend
+// =============================================================================
+
+/**
+ * Recopila el archivo y las opciones del formulario,
+ * los envía al endpoint /api/normalizar y renderiza la respuesta.
+ *
+ * Usa la API fetch() con FormData para enviar el archivo de forma multipart.
+ */
+async function procesar() {
+  // Verificar que hay un archivo cargado
+  if (!archivoSeleccionado) {
+    mostrarError('Por favor selecciona un archivo primero.');
+    return;
+  }
+
+  // Mostrar spinner en el botón mientras procesa
+  setBtnLoading(true);
+
+  // Construir FormData con el archivo y todas las opciones
+  const fd = new FormData();
+  fd.append('archivo',  archivoSeleccionado);
+  fd.append('fmt',      formatoActivo);
+  fd.append('tildes',   document.getElementById('opt-tildes').checked);
+  fd.append('enie',     document.getElementById('opt-enie').checked);
+  fd.append('dedup',    document.getElementById('opt-dedup').checked);
+  fd.append('spaces',   document.getElementById('opt-spaces').checked);
+
+  try {
+    // Enviar al backend Flask
+    const res = await fetch('/api/normalizar', { method: 'POST', body: fd });
+    const data = await res.json();
+
+    if (!res.ok) {
+      // El backend retornó un error HTTP (400, 500, etc.)
+      mostrarError(data.error || 'Error desconocido al procesar.');
+      setBtnLoading(false);
+      return;
+    }
+
+    // Guardar sesión para las descargas
+    sesionActual = data.sesion_id;
+
+    // Actualizar estadísticas en pantalla
+    document.getElementById('s-total').textContent   = data.stats.total.toLocaleString();
+    document.getElementById('s-unique').textContent  = data.stats.unicos.toLocaleString();
+    document.getElementById('s-dups').textContent    = data.stats.duplicados.toLocaleString();
+    document.getElementById('s-changed').textContent = data.stats.modificados.toLocaleString();
+
+    // Renderizar la tabla de preview
+    renderizarPreview(data.preview);
+
+    // Mostrar el log en el bloque de código
+    document.getElementById('log-box').textContent = data.log;
+
+    // Habilitar botones de descarga
+    ['btn-csv', 'btn-log', 'btn-sql'].forEach(id =>
+      document.getElementById(id).disabled = false
+    );
+
+    // Mostrar la sección de resultados y hacer scroll hacia ella
+    document.getElementById('results').classList.remove('hidden');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+
+  } catch (err) {
+    // Error de red u otro error inesperado
+    mostrarError('Error de conexión: ' + err.message);
+  } finally {
+    // Siempre restaurar el botón al terminar
+    setBtnLoading(false);
+  }
+}
+
+// =============================================================================
+// RENDERIZADO DE LA TABLA DE PREVIEW
+// =============================================================================
+
+/**
+ * Genera las filas HTML de la tabla de vista previa a partir del array
+ * de objetos retornado por el backend.
+ *
+ * Parámetros:
+ *   rows : Array<{linea, original, normalizado, estado}>
+ */
+function renderizarPreview(rows) {
+  const tbody = document.getElementById('preview-body');
+  tbody.innerHTML = '';  // limpiar tabla anterior
+
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+
+    // Elegir el badge según el estado del registro
+    let badge = '';
+    if      (r.estado === 'DUPLICADO')  badge = `<span class="badge badge-dup">Duplicado</span>`;
+    else if (r.estado === 'MODIFICADO') badge = `<span class="badge badge-fix">Modificado</span>`;
+    else                                 badge = `<span class="badge badge-ok">OK</span>`;
+
+    tr.innerHTML = `
+      <td style="color:var(--text-muted);font-size:12px">${r.linea}</td>
+      <td>${escHTML(r.original)}</td>
+      <td class="${r.estado !== 'OK' ? 'changed' : ''}">${escHTML(r.normalizado)}</td>
+      <td>${badge}</td>`;
+
+    tbody.appendChild(tr);
+  });
+}
+
+// =============================================================================
+// DESCARGAS
+// =============================================================================
+
+/**
+ * Dispara la descarga de un archivo del servidor.
+ * Abre la URL /api/descargar/<sesion>/<tipo> en una nueva pestaña,
+ * lo que provoca la descarga automáticamente.
+ *
+ * Parámetros:
+ *   tipo : 'csv' | 'log' | 'sql'
+ */
+function descargar(tipo) {
+  if (!sesionActual) return;
+  // Abrir la URL de descarga: el servidor responde con Content-Disposition: attachment
+  window.open(`/api/descargar/${sesionActual}/${tipo}`, '_blank');
+}
+
+/**
+ * Llama al endpoint /api/limpiar para vaciar la base de datos.
+ * Pide confirmación al usuario antes de proceder.
+ */
+async function limpiarBD() {
+  if (!confirm('¿Seguro que deseas limpiar toda la base de datos? Esta acción no se puede deshacer.')) return;
+
+  const res = await fetch('/api/limpiar', { method: 'POST' });
+  const data = await res.json();
+  alert(data.mensaje || 'Base de datos limpiada.');
+}
+
+// =============================================================================
+// UTILIDADES
+// =============================================================================
+
+/**
+ * Escapa caracteres HTML para evitar inyección en la tabla.
+ * Ejemplo: '<script>' → '&lt;script&gt;'
+ */
+function escHTML(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Muestra un mensaje de error en la caja roja bajo el dropzone.
+ */
+function mostrarError(msg) {
+  const box = document.getElementById('error-box');
+  box.textContent = '⚠️ ' + msg;
+  box.classList.remove('hidden');
+}
+
+/**
+ * Alterna el estado visual del botón "Normalizar" entre
+ * cargando (spinner) y listo para usar.
+ */
+function setBtnLoading(loading) {
+  const btn  = document.getElementById('btn-run');
+  const icon = document.getElementById('btn-icon');
+  const txt  = document.getElementById('btn-text');
+  if (loading) {
+    btn.disabled = true;
+    icon.outerHTML = '<span id="btn-icon" class="spinner"></span>';
+    txt.textContent = 'Procesando…';
+  } else {
+    document.getElementById('btn-icon').outerHTML = '<span id="btn-icon">▶</span>';
+    document.getElementById('btn-text').textContent = 'Normalizar datos';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
