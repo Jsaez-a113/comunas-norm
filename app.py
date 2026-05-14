@@ -552,6 +552,43 @@ def api_comunas():
     return jsonify([dict(f) for f in filas])
 
 
+@app.route('/api/db-status')
+def api_db_status():
+    """
+    Retorna el estado actual completo de la base de datos SQLite:
+      - Total de registros en COMUNAS_NORM
+      - Total de entradas en PROCESO_LOG
+      - Últimas 10 comunas insertadas (para mostrar en UI)
+      - Últimas 10 entradas del log
+      - Ruta del archivo .db en el servidor
+    Usado por el frontend para mostrar la sección "Estado de la BD".
+    """
+    db = get_db()
+
+    # Contar registros en cada tabla
+    total_comunas = db.execute('SELECT COUNT(*) FROM COMUNAS_NORM').fetchone()[0]
+    total_log     = db.execute('SELECT COUNT(*) FROM PROCESO_LOG').fetchone()[0]
+
+    # Últimas 10 comunas (orden descendente por id)
+    ultimas_comunas = db.execute(
+        'SELECT id, nombre_comuna, fecha_insercion FROM COMUNAS_NORM ORDER BY id DESC LIMIT 10'
+    ).fetchall()
+
+    # Últimas 10 entradas del log
+    ultimo_log = db.execute(
+        '''SELECT linea_num, valor_orig, valor_norm, estado, sesion_id
+           FROM PROCESO_LOG ORDER BY id DESC LIMIT 10'''
+    ).fetchall()
+
+    return jsonify({
+        'archivo_db':     os.path.abspath(DATABASE),   # ruta física del .db
+        'total_comunas':  total_comunas,
+        'total_log':      total_log,
+        'ultimas_comunas': [dict(r) for r in ultimas_comunas],
+        'ultimo_log':     [dict(r) for r in ultimo_log],
+    })
+
+
 @app.route('/api/limpiar', methods=['POST'])
 def api_limpiar():
     """

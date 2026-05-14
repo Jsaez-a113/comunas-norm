@@ -280,6 +280,86 @@
       </div>
     </div>
 
+    <!-- ── ESTADO DE LA BASE DE DATOS SQLITE ─────────────────── -->
+    <div class="card">
+      <div class="card-head">
+        🗄️ Estado de la Base de Datos SQLite
+        <span style="margin-left:auto;font-size:12px;font-weight:400;color:var(--text-muted)" id="db-path"></span>
+      </div>
+      <div class="card-body">
+
+        <!-- Indicadores de tablas -->
+        <div class="stats-grid" style="margin-bottom:16px">
+          <div class="stat info">
+            <div class="label">Registros en COMUNAS_NORM</div>
+            <div class="value" id="db-total-comunas">—</div>
+          </div>
+          <div class="stat">
+            <div class="label">Entradas en PROCESO_LOG</div>
+            <div class="value" id="db-total-log">—</div>
+          </div>
+        </div>
+
+        <!-- Esquema visual de las tablas -->
+        <div style="background:#1a1d2b;border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:16px;font-family:'Courier New',monospace;font-size:12px;color:#7ec8e3;line-height:1.8">
+<span style="color:#f9c74f;font-weight:700">-- Tabla 1: COMUNAS_NORM (datos normalizados)</span>
+<br><span style="color:#a8d8a8">CREATE TABLE</span> COMUNAS_NORM (
+<br>&nbsp;&nbsp;id              INTEGER  <span style="color:#f9c74f">PRIMARY KEY AUTOINCREMENT</span>,
+<br>&nbsp;&nbsp;nombre_comuna   TEXT     <span style="color:#f9c74f">NOT NULL UNIQUE</span>,
+<br>&nbsp;&nbsp;fecha_insercion TEXT     NOT NULL
+<br>);
+<br><br><span style="color:#f9c74f;font-weight:700">-- Tabla 2: PROCESO_LOG (historial de cambios ETL)</span>
+<br><span style="color:#a8d8a8">CREATE TABLE</span> PROCESO_LOG (
+<br>&nbsp;&nbsp;id         INTEGER  <span style="color:#f9c74f">PRIMARY KEY AUTOINCREMENT</span>,
+<br>&nbsp;&nbsp;sesion_id  TEXT     NOT NULL,
+<br>&nbsp;&nbsp;linea_num  INTEGER,
+<br>&nbsp;&nbsp;valor_orig TEXT,
+<br>&nbsp;&nbsp;valor_norm TEXT,
+<br>&nbsp;&nbsp;estado     TEXT,    <span style="color:#888">-- OK | MODIFICADO | DUPLICADO</span>
+<br>&nbsp;&nbsp;fecha      TEXT     NOT NULL
+<br>);
+        </div>
+
+        <!-- Últimos registros en COMUNAS_NORM -->
+        <p style="font-weight:600;font-size:13px;margin-bottom:8px">
+          Últimos registros insertados en <code style="background:#f0f3fa;padding:1px 6px;border-radius:4px">COMUNAS_NORM</code>:
+        </p>
+        <div class="table-wrap" style="max-height:200px;margin-bottom:16px">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>nombre_comuna</th><th>fecha_insercion</th></tr>
+            </thead>
+            <tbody id="db-comunas-body">
+              <tr><td colspan="3" style="color:var(--text-muted);text-align:center;padding:14px">Procesa un archivo para ver datos en la BD</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Últimas entradas del PROCESO_LOG -->
+        <p style="font-weight:600;font-size:13px;margin-bottom:8px">
+          Últimas entradas en <code style="background:#f0f3fa;padding:1px 6px;border-radius:4px">PROCESO_LOG</code>:
+        </p>
+        <div class="table-wrap" style="max-height:200px">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Original</th><th>Normalizado</th><th>Estado</th><th>Sesión</th></tr>
+            </thead>
+            <tbody id="db-log-body">
+              <tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:14px">Sin datos aún</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Botón para refrescar manualmente -->
+        <div style="margin-top:14px">
+          <button class="btn-dl secondary" onclick="actualizarBD()" style="font-size:12px">
+            🔄 Actualizar vista de BD
+          </button>
+        </div>
+
+      </div>
+    </div>
+
   </div><!-- /results -->
 
 </main>
@@ -432,6 +512,9 @@ async function procesar() {
     document.getElementById('results').classList.remove('hidden');
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
 
+    // Consultar el estado real de la BD SQLite y mostrarlo en la sección inferior
+    actualizarBD();
+
   } catch (err) {
     // Error de red u otro error inesperado
     mostrarError('Error de conexión: ' + err.message);
@@ -499,10 +582,83 @@ function descargar(tipo) {
  */
 async function limpiarBD() {
   if (!confirm('¿Seguro que deseas limpiar toda la base de datos? Esta acción no se puede deshacer.')) return;
-
   const res = await fetch('/api/limpiar', { method: 'POST' });
   const data = await res.json();
   alert(data.mensaje || 'Base de datos limpiada.');
+  // Refrescar la vista de BD después de limpiar
+  actualizarBD();
+}
+
+// =============================================================================
+// VISOR DE BASE DE DATOS SQLITE
+// =============================================================================
+
+/**
+ * Consulta el endpoint /api/db-status y actualiza la sección
+ * "Estado de la Base de Datos SQLite" con los datos reales de SQLite.
+ *
+ * Se llama automáticamente al terminar de procesar un archivo
+ * y también cuando el usuario hace clic en "Actualizar vista de BD".
+ */
+async function actualizarBD() {
+  try {
+    const res  = await fetch('/api/db-status');
+    const data = await res.json();
+
+    // Mostrar la ruta física del archivo .db en el servidor
+    document.getElementById('db-path').textContent = '📁 ' + data.archivo_db;
+
+    // Actualizar contadores de registros
+    document.getElementById('db-total-comunas').textContent = data.total_comunas.toLocaleString();
+    document.getElementById('db-total-log').textContent     = data.total_log.toLocaleString();
+
+    // ── Tabla COMUNAS_NORM ────────────────────────────────────────
+    const tbComunas = document.getElementById('db-comunas-body');
+    tbComunas.innerHTML = '';
+
+    if (data.ultimas_comunas.length === 0) {
+      // Tabla vacía
+      tbComunas.innerHTML = '<tr><td colspan="3" style="color:var(--text-muted);text-align:center;padding:14px">La tabla COMUNAS_NORM está vacía</td></tr>';
+    } else {
+      data.ultimas_comunas.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="color:var(--text-muted);font-size:12px">${r.id}</td>
+          <td style="font-weight:500;color:var(--accent)">${escHTML(r.nombre_comuna)}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${r.fecha_insercion}</td>`;
+        tbComunas.appendChild(tr);
+      });
+    }
+
+    // ── Tabla PROCESO_LOG ─────────────────────────────────────────
+    const tbLog = document.getElementById('db-log-body');
+    tbLog.innerHTML = '';
+
+    if (data.ultimo_log.length === 0) {
+      tbLog.innerHTML = '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:14px">La tabla PROCESO_LOG está vacía</td></tr>';
+    } else {
+      data.ultimo_log.forEach(r => {
+        // Badge de estado igual que en la preview principal
+        let badge = '';
+        if      (r.estado === 'DUPLICADO')  badge = `<span class="badge badge-dup">Duplicado</span>`;
+        else if (r.estado === 'MODIFICADO') badge = `<span class="badge badge-fix">Modificado</span>`;
+        else                                 badge = `<span class="badge badge-ok">OK</span>`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="color:var(--text-muted);font-size:12px">${r.linea_num}</td>
+          <td>${escHTML(r.valor_orig)}</td>
+          <td style="color:var(--accent);font-weight:500">${escHTML(r.valor_norm)}</td>
+          <td>${badge}</td>
+          <td style="font-size:11px;color:var(--text-muted)">${r.sesion_id}</td>`;
+        tbLog.appendChild(tr);
+      });
+    }
+
+  } catch (err) {
+    // Si hay error al consultar la BD, solo lo mostramos en consola (no interrumpe el flujo)
+    console.error('Error al consultar estado de BD:', err);
+  }
 }
 
 // =============================================================================
